@@ -6,6 +6,7 @@ import io
 import sys
 import subprocess
 import os
+import re
 
 
 def load_pdf_pages(pdf_path: str):
@@ -24,14 +25,43 @@ def render_pdf_page(doc, page_num: int, dpi: int = 150):
     return img
 
 
-def load_png_files(png_dir: str):
-    """Load and sort PNG files from directory."""
-    png_path = Path(png_dir)
-    if not png_path.exists():
-        return []
+def parse_markdown_by_pages(markdown_path: str):
+    """Parse markdown file and split by page markers (## Page XXXX)."""
+    if not Path(markdown_path).exists():
+        return {}
     
-    png_files = sorted(png_path.glob("page_*.png"), key=lambda x: int(x.stem.split("_")[1]))
-    return [str(f) for f in png_files]
+    with open(markdown_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    # Split by page markers: ## Page XXXX
+    # Pattern matches: ## Page followed by digits
+    pattern = r'## Page (\d+)'
+    pages = {}
+    
+    # Find all page markers
+    matches = list(re.finditer(pattern, content))
+    
+    if not matches:
+        # If no page markers, return entire content as page 1
+        pages[0] = content
+        return pages
+    
+    # Extract content for each page
+    for i, match in enumerate(matches):
+        page_num = int(match.group(1)) - 1  # Convert to 0-indexed
+        start_pos = match.start()
+        
+        # Find end position (start of next page or end of file)
+        if i + 1 < len(matches):
+            end_pos = matches[i + 1].start()
+        else:
+            end_pos = len(content)
+        
+        # Extract page content (including the page marker)
+        page_content = content[start_pos:end_pos].strip()
+        pages[page_num] = page_content
+    
+    return pages
 
 
 # Initialize session state
@@ -40,7 +70,7 @@ if "page_index" not in st.session_state:
 
 # File paths
 PDF_PATH = "AR2024_C.pdf"
-PNG_DIR = "png_output"
+MARKDOWN_PATH = "output.md"
 
 # Load PDF
 if not Path(PDF_PATH).exists():
@@ -49,16 +79,16 @@ if not Path(PDF_PATH).exists():
 
 pdf_doc, pdf_total_pages = load_pdf_pages(PDF_PATH)
 
-# Load PNG files
-png_files = load_png_files(PNG_DIR)
-png_total_pages = len(png_files)
+# Load markdown pages
+markdown_pages = parse_markdown_by_pages(MARKDOWN_PATH)
+markdown_total_pages = max(markdown_pages.keys()) + 1 if markdown_pages else 0
 
-if png_total_pages == 0:
-    st.error(f"No PNG files found in {PNG_DIR}")
+if markdown_total_pages == 0:
+    st.error(f"No markdown pages found in {MARKDOWN_PATH}")
     st.stop()
 
 # Use minimum of both to ensure sync
-total_pages = min(pdf_total_pages, png_total_pages)
+total_pages = min(pdf_total_pages, markdown_total_pages)
 
 # Ensure page_index is within valid range
 if st.session_state.page_index >= total_pages:
@@ -84,7 +114,7 @@ with col3_btn:
 
 st.divider()
 
-# Two-column layout for PDF and PNG
+# Two-column layout for PDF and Markdown
 col_left, col_right = st.columns([1, 1])
 
 with col_left:
@@ -96,23 +126,22 @@ with col_left:
         st.error(f"Error rendering PDF page: {e}")
 
 with col_right:
-    st.subheader("PNG View")
+    st.subheader("Markdown View")
     try:
-        if st.session_state.page_index < len(png_files):
-            png_path = png_files[st.session_state.page_index]
-            png_img = Image.open(png_path)
-            st.image(png_img, use_container_width=True)
+        if st.session_state.page_index in markdown_pages:
+            markdown_content = markdown_pages[st.session_state.page_index]
+            st.markdown(markdown_content)
         else:
-            st.warning("PNG file not available for this page")
+            st.warning(f"Markdown content not available for page {st.session_state.page_index + 1}")
     except Exception as e:
-        st.error(f"Error loading PNG: {e}")
+        st.error(f"Error loading markdown: {e}")
 
 # Close PDF document when done (though it will be reopened on rerun)
 # We keep it open for the session to avoid repeated file I/O
 
 
 def main():
-    """Start Streamlit web service on port 80."""
+    """Start Streamlit web service on port 8080."""
     # Get the path to the current script
     script_path = os.path.abspath(__file__)
     
@@ -124,21 +153,21 @@ def main():
     except:
         pass
     
-    # Start Streamlit server on port 80
+    # Start Streamlit server on port 8080
     cmd = [
         sys.executable,
         "-m",
         "streamlit",
         "run",
         script_path,
-        "--server.port=80",
-        "--server.address=0.0.0.0",
+        "--server.port=8080",
+        "--server.address=127.0.0.1",
         "--server.headless=true",
         "--browser.gatherUsageStats=false"
     ]
     
-    print(f"Starting Streamlit web service on port 80...")
-    print(f"Access the application at: http://localhost:80")
+    print(f"Starting Streamlit web service on port 8080...")
+    print(f"Access the application at: http://127.0.0.1:8080")
     print(f"Press Ctrl+C to stop the server")
     
     # Run the streamlit server

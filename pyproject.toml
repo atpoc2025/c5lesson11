@@ -13,5 +13,6 @@ dependencies = [
     "pymupdf-layout>=1.26.6",
     "pymupdf4llm>=0.2.0",
     "python-dotenv>=1.2.1",
+    "pytesseract>=0.3.10",
     "streamlit>=1.51.0",
 ]
